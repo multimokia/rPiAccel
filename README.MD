@@ -1,7 +1,7 @@
 # rPiAccel 
 A fun side project using dotnet core project for reading accelerometer data from an [MPU6050 module](https://components101.com/sensors/mpu6050-module) using the GPIO Pins on a Raspberry Pi.
 
-It is intended to show how you could use the [Accelerometer service](./Services/AccelerometerService.cs)
+It is intended to show how you could use the [Accelerometer service](./Services/AccelerometerService.cs) to read changes from the MPU6050 in dotnet
 
 
 ## Wire up
