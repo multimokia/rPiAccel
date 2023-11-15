@@ -24,7 +24,7 @@ namespace rPiAccel.Services
         {
             if (_running) return;
 
-            _mpu6050.InitHardware();
+            _mpu6050.InitHardware(Mpu6050.AccelRange.G16);
             _mpu6050.SensorInterruptEvent += _mpu6050_SensorInterruptEvent;
 
             Task.Run(Listen);

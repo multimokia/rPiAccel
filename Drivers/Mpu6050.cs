@@ -8,6 +8,14 @@ namespace rPiAccel.Drivers
 {
     public partial class Mpu6050 : IDisposable
     {
+        public enum AccelRange
+        {
+            G2 = 0,
+            G4 = 1,
+            G8 = 2,
+            G16 = 3,
+        }
+
         public event EventHandler<MpuSensorEventArgs> SensorInterruptEvent;
 
         #region Constants
@@ -25,7 +33,6 @@ namespace rPiAccel.Drivers
         private const byte FIFO_COUNT = 0x72;
         private const byte FIFO_R_W = 0x74;
         private const int SensorBytes = 12;
-
         #endregion
 
         private const Int32 INTERRUPT_PIN = 18;
@@ -33,6 +40,10 @@ namespace rPiAccel.Drivers
         private GpioController IoController;
 
         #region 12c
+
+        #region instance variables
+        private int LSBDivisor;
+        #endregion
 
         private byte ReadByte(byte regAddr)
         {
@@ -76,17 +87,19 @@ namespace rPiAccel.Drivers
 
         #endregion
 
-        public async void InitHardware()
+        public async void InitHardware(AccelRange accelRange, int sampleRateHz = 100)
         {
             try
             {
+                // Create the device instance
                 IoController = new GpioController(PinNumberingScheme.Logical);
                 IoController.OpenPin(INTERRUPT_PIN);
                 IoController.Write(INTERRUPT_PIN, PinValue.Low);
                 IoController.SetPinMode(INTERRUPT_PIN, PinMode.Input);
-
                 _mpu6050Device = I2cDevice.Create(new I2cConnectionSettings(1, ADDRESS));
 
+                // Now we apply configurations
+                LSBDivisor = 16384 / Math.Pow(2, (int)accelRange);
                 await Task.Delay(3); // wait power up sequence
                 WriteByte(PWR_MGMT_1, 0x80);// reset the device
                 await Task.Delay(100);
@@ -95,7 +108,7 @@ namespace rPiAccel.Drivers
 
                 WriteByte(PWR_MGMT_1, 1); // clock source = gyro x
                 WriteByte(GYRO_CONFIG, 0); // +/- 250 degrees sec
-                WriteByte(ACCEL_CONFIG, 0); // +/- 2g
+                WriteByte(ACCEL_CONFIG, (int)accelRange);
 
                 WriteByte(CONFIG, 1); // 184 Hz, 2ms delay
                 WriteByte(SMPLRT_DIV, 19);  // set rate 50Hz
@@ -144,9 +157,9 @@ namespace rPiAccel.Drivers
                         short zg = (short)((int)data[10] << 8 | (int)data[11]);
 
                         MpuSensorValue sv = new MpuSensorValue();
-                        sv.AccelerationX = (float)xa / (float)16384;
-                        sv.AccelerationY = (float)ya / (float)16384;
-                        sv.AccelerationZ = (float)za / (float)16384;
+                        sv.AccelerationX = (float)xa / (float)LSBDivisor;
+                        sv.AccelerationY = (float)ya / (float)LSBDivisor;
+                        sv.AccelerationZ = (float)za / (float)LSBDivisor;
                         sv.GyroX = (float)xg / (float)131;
                         sv.GyroY = (float)yg / (float)131;
                         sv.GyroZ = (float)zg / (float)131;
