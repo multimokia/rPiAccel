@@ -36,13 +36,13 @@ namespace rPiAccel.Drivers
         #endregion
 
         private const Int32 INTERRUPT_PIN = 18;
-        I2cDevice _mpu6050Device = null;
-        private GpioController IoController;
 
         #region 12c
 
         #region instance variables
-        private int LSBDivisor;
+        I2cDevice _MPU6050Device = null;
+        private GpioController _IoController;
+        private double LSBDivisor;
         #endregion
 
         private byte ReadByte(byte regAddr)
@@ -50,7 +50,7 @@ namespace rPiAccel.Drivers
             byte[] buffer = new byte[1];
             buffer[0] = regAddr;
             byte[] value = new byte[1];
-            _mpu6050Device.WriteRead(buffer, value);
+            _MPU6050Device.WriteRead(buffer, value);
             return value[0];
         }
 
@@ -59,7 +59,7 @@ namespace rPiAccel.Drivers
             byte[] values = new byte[length];
             byte[] buffer = new byte[1];
             buffer[0] = regAddr;
-            _mpu6050Device.WriteRead(buffer, values);
+            _MPU6050Device.WriteRead(buffer, values);
             return values;
         }
 
@@ -74,7 +74,7 @@ namespace rPiAccel.Drivers
             byte[] buffer = new byte[2];
             buffer[0] = regAddr;
             buffer[1] = data;
-            _mpu6050Device.Write(buffer);
+            _MPU6050Device.Write(buffer);
         }
 
         void writeBytes(byte regAddr, byte[] values)
@@ -82,7 +82,7 @@ namespace rPiAccel.Drivers
             byte[] buffer = new byte[1 + values.Length];
             buffer[0] = regAddr;
             Array.Copy(values, 0, buffer, 1, values.Length);
-            _mpu6050Device.Write(buffer);
+            _MPU6050Device.Write(buffer);
         }
 
         #endregion
@@ -92,14 +92,16 @@ namespace rPiAccel.Drivers
             try
             {
                 // Create the device instance
-                IoController = new GpioController(PinNumberingScheme.Logical);
-                IoController.OpenPin(INTERRUPT_PIN);
-                IoController.Write(INTERRUPT_PIN, PinValue.Low);
-                IoController.SetPinMode(INTERRUPT_PIN, PinMode.Input);
-                _mpu6050Device = I2cDevice.Create(new I2cConnectionSettings(1, ADDRESS));
+                _IoController = new GpioController(PinNumberingScheme.Logical);
+                _IoController.OpenPin(INTERRUPT_PIN);
+                _IoController.Write(INTERRUPT_PIN, PinValue.Low);
+                _IoController.SetPinMode(INTERRUPT_PIN, PinMode.Input);
+                _MPU6050Device = I2cDevice.Create(new I2cConnectionSettings(1, ADDRESS));
+
+                // Prep the divisor
+                this.LSBDivisor = 16384 / Math.Pow(2, (int)accelRange);
 
                 // Now we apply configurations
-                LSBDivisor = 16384 / Math.Pow(2, (int)accelRange);
                 await Task.Delay(3); // wait power up sequence
                 WriteByte(PWR_MGMT_1, 0x80);// reset the device
                 await Task.Delay(100);
@@ -108,7 +110,7 @@ namespace rPiAccel.Drivers
 
                 WriteByte(PWR_MGMT_1, 1); // clock source = gyro x
                 WriteByte(GYRO_CONFIG, 0); // +/- 250 degrees sec
-                WriteByte(ACCEL_CONFIG, (int)accelRange);
+                WriteByte(ACCEL_CONFIG, (byte)accelRange);
 
                 WriteByte(CONFIG, 1); // 184 Hz, 2ms delay
                 WriteByte(SMPLRT_DIV, 19);  // set rate 50Hz
@@ -116,7 +118,7 @@ namespace rPiAccel.Drivers
                 WriteByte(USER_CTRL, 0x40); // reset and enable fifo
                 WriteByte(INT_ENABLE, 0x1);
 
-                IoController.RegisterCallbackForPinValueChangedEvent(INTERRUPT_PIN, PinEventTypes.Rising | PinEventTypes.Falling, Interrupt);
+                _IoController.RegisterCallbackForPinValueChangedEvent(INTERRUPT_PIN, PinEventTypes.Rising | PinEventTypes.Falling, Interrupt);
 
             }
             catch (Exception ex)
@@ -127,7 +129,7 @@ namespace rPiAccel.Drivers
 
         private void Interrupt(object sender, PinValueChangedEventArgs args)
         {
-            if (_mpu6050Device != null)
+            if (_MPU6050Device != null)
             {
                 int interrupt_status = ReadByte(INT_STATUS);
                 if ((interrupt_status & 0x10) != 0)
@@ -185,10 +187,10 @@ namespace rPiAccel.Drivers
         {
             if (!disposedValue)
             {
-                if (_mpu6050Device != null)
+                if (_MPU6050Device != null)
                 {
-                    _mpu6050Device.Dispose();
-                    _mpu6050Device = null;
+                    _MPU6050Device.Dispose();
+                    _MPU6050Device = null;
                 }
                 disposedValue = true;
 
